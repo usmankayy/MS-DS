@@ -1,0 +1,202 @@
+---
+title: "Analysis of NYPD Shooting Incident Data"
+author: "by Usman Khan"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    css: dark_theme.css
+    highlight: textmate
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+    toc: true
+    keep_tex: true
+fontsize: 11pt
+mainfont: "Google Sans"
+---
+
+![](assets/cover.jpg){width=100%}
+<style>
+body {
+  font-family: "Google Sans", sans-serif;
+}
+</style>
+
+# Introduction
+
+This project uses end-to-end data science techniques to analyze historical NYPD shooting incident data. We uncover borough-level patterns, time-based trends, and factors affecting fatal outcomes through logistic regression. We also address potential biases and ensure full reproducibility throughout the workflow.
+
+---
+
+# Data Source
+
+The dataset is from the NYPD Shooting Incident Database, containing detailed records of shooting incidents across New York City from 2006. It includes location, date, suspect/victim demographics, and fatality outcomes.
+
+---
+
+# Data Import & Cleaning
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+```
+
+```{r}
+# Load and clean data
+shootings <- read_csv("nypd-shooting-incident-data.csv") %>%
+  clean_names() %>%
+  mutate(
+    occur_date = mdy(occur_date),
+    year = year(occur_date),
+    month = month(occur_date, label = TRUE),
+    is_fatal = ifelse(statistical_murder_flag == "Y", 1, 0)
+  )
+```
+
+---
+
+# Exploratory Data Analysis
+```{r}
+# Total Shootings by Borough
+shootings %>%
+  count(boro) %>%
+  ggplot(aes(x = reorder(boro, -n), y = n, fill = boro)) +
+  geom_col() +
+  labs(title = "Total Shootings by Borough", x = "", y = "Incidents") +
+  theme_minimal()
+```
+
+```{r}
+# Monthly Shooting Trends - cleaned up
+library(scales) # for nice date formatting
+
+shootings %>%
+  count(year, month) %>%
+  mutate(year_month = as.Date(paste(year, month, "01", sep = "-"), "%Y-%b-%d")) %>%
+  ggplot(aes(x = year_month, y = n, group = 1)) +
+  geom_line(color = "#1e88e5", size = 1) +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "6 months") +
+  labs(title = "Monthly Shooting Incidents",
+       x = "Month-Year", y = "Number of Incidents") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 16)
+  )
+```
+
+## Key Findings from EDA
+- Brooklyn reported the highest number of shooting incidents.
+- Summer months showed noticeable spikes in shootings across the years.
+- Fatal shootings are a smaller but critical subset of overall incidents.
+
+```{r}
+# Shooting Fatality Rates by Borough
+shootings %>%
+  group_by(boro) %>%
+  summarize(fatal_shootings = sum(is_fatal, na.rm = TRUE),
+            nonfatal_shootings = n() - fatal_shootings) %>%
+  pivot_longer(cols = c(fatal_shootings, nonfatal_shootings),
+               names_to = "outcome", values_to = "count") %>%
+  ggplot(aes(x = boro, y = count, fill = outcome)) +
+  geom_col(position = "dodge") +
+  labs(title = "Shooting Outcomes by Borough",
+       x = "Borough", y = "Number of Incidents",
+       fill = "Outcome") +
+  theme_minimal()
+```
+
+---
+
+# Predictive Modeling
+
+```{r}
+# Prepare modeling dataset
+model_data <- shootings %>%
+  filter(!is.na(is_fatal)) %>%
+  select(is_fatal, boro, perp_age_group, perp_sex, vic_age_group, vic_sex) %>%
+  mutate(across(everything(), as.factor))
+
+# Fit logistic regression model
+model <- glm(is_fatal ~ ., data = model_data, family = "binomial")
+
+# Show model summary
+summary(model)
+```
+
+---
+
+# Model Diagnostic
+The bar graph below shows how the model distributes predicted probabilities across all incidents. Most predicted fatality probabilities are clustered toward low values, suggesting most shootings were non-fatal.
+
+```{r}
+library(scales)
+
+model_data$predicted <- predict(model, newdata = model_data, type = "response")
+
+# Only bin non-missing predicted values
+model_data <- model_data %>%
+  filter(!is.na(predicted)) %>%
+  mutate(
+    bin = cut(
+      predicted,
+      breaks = c(0, 0.01, 0.02, 0.05, 1),
+      labels = c("0-1%", "1-2%", "2-5%", ">5%"),
+      include.lowest = TRUE
+    )
+  )
+
+# Plot
+ggplot(model_data, aes(x = bin)) +
+  geom_bar(fill = "#1565C0", color = "white") +
+  labs(
+    title = "Distribution of Predicted Fatality Probabilities",
+    x = "Predicted Probability Range",
+    y = "Number of Incidents"
+  ) +
+  theme_minimal()
+```
+
+---
+
+# Interpretation of Model
+The logistic regression model indicates how borough, perpetrator age and sex, and victim demographics relate to the probability of a shooting being fatal. While some categories show stronger associations, missing and broad categorical data limit firm conclusions.
+
+* Older perpetrators had slightly higher odds of fatal outcomes.
+* Borough differences suggest regional disparities in deadly shootings.
+
+These insights provide an initial understanding of demographic and geographic factors influencing shooting outcomes in NYC.
+
+---
+
+# Bias & Limitations
+
+- **Reporting Bias**: Inaccurate reporting or recording can easily lead to underrepresented or skewed data
+- **Demographic Bias**: Age and sex categories are broad and potentially vague, which may oversimplify individual characteristics
+- **Policing Bias**: Heavily policed boroughs may show artificially higher incident counts due to increased surveillance and reporting
+- **Data Completeness**: Missing or unknown values (e.g., suspect demographics) can reduce the model’s reliability
+- **Model Assumptions**: Logistic regression assumes independence between features and a linear log-odds relationship, which may be false
+- **Ethical Consideration**: Predictive models based on incomplete or biased datasets risk reinforcing existing disparities. It’s crucial to interpret such models carefully and avoid overgeneralizing sensitive outcomes like fatalities.
+
+---
+
+# Reproducibility
+
+**RMarkdown** was used to conduct this analysis, allowing for transparent and repeatable research workflows. All packages used are open-source and widely available via CRAN.  
+
+- This document includes all code and re-runs it on the same dataset
+- To ensure readable and consistent data pipelines, we used `tidyverse` and `janitor`
+- No manual data manipulation was performed outside the script
+- Since the analysis does not use randomness (like sampling or model initialization), there’s no need to set a seed.
+
+The aforementioned points ensure that the results are **fully reproducible** and transparent for future reviews, iterations, or audits.
+
+---
+
+# Conclusion
+
+This analysis reveals uneven patterns of shootings across boroughs and over time, with specific demographic trends emerging in fatal cases. While the logistic regression model offers valuable directional insights, missing and vague data fields limit its full potential. Incorporating more granular and complete data could improve predictive accuracy and better inform policy decisions aimed at reducing gun violence.

@@ -1,0 +1,90 @@
+body {
+    background-color: #121212;
+    color: #E0E0E0;
+    font-family: "Google Sans", sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5 {
+    color: #FAFAFA;
+  }
+  
+  a {
+    color: #90CAF9;
+  }
+  
+  hr {
+    border-top: 1px solid #333;
+  }
+  
+/* ------------------- CODE BLOCK STYLING ------------------- */
+
+pre, code {
+    background-color: #0d1b2a !important; /* deep blue */
+    color: #89c2d9 !important;           /* soft blue text */
+    border: 1px solid #1b263b;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: "Fira Code", "Courier New", monospace;
+  }
+  
+  /* Inline code specifically */
+  code {
+    background-color: #1e2e40 !important;
+    color: #89c2d9 !important;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  
+  pre code span {
+    background-color: transparent !important;
+  }
+
+  /* TOC container */
+.tocify {
+    background-color: #0d1b2a !important;
+    border: 1px solid #1b263b;
+    box-shadow: none;
+    font-family: "Google Sans", sans-serif;
+  }
+  
+  /* Each TOC item (the link) */
+  .tocify .tocify-item {
+    padding: 8px 12px;
+    font-size: 15px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    background-color: #f0f0f0;
+    color: #1e3a8a;
+    font-weight: 500;
+    display: block;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+  }
+  
+  /* Active section */
+  .tocify .tocify-item.active {
+    background-color: #1e3a8a !important;
+    color: #ffffff !important;
+    font-weight: bold;
+  }
+  
+  /* Hover */
+  .tocify .tocify-item:hover {
+    background-color: #dbeafe !important;
+    color: #1e3a8a !important;
+  }
+  
+  /* Ensure nested levels display properly */
+  .tocify ul {
+    padding-left: 0;
+  }
+    
+  /* Also remove any box-shadow/hover ghosting */
+  pre code {
+    box-shadow: none !important;
+  }
+
+  pre {
+    background-image: none !important;
+  }
