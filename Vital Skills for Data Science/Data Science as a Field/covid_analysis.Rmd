@@ -1,0 +1,217 @@
+---
+title: "COVID-19 Global Analysis"
+author: "*by Usman Khan*"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    css: dark_theme.css
+    highlight: textmate
+  pdf_document:
+    latex_engine: xelatex
+    number_sections: true
+    toc: true
+    keep_tex: true
+fontsize: 11pt
+mainfont: "Google Sans"
+---
+
+---
+
+![](assets/jh.jpg){width=100%}
+<style>
+body {
+  font-family: "Google Sans", sans-serif;
+}
+</style>
+
+# Introduction
+
+The COVID-19 pandemic stands as one of the most significant global health crises in modern history, reshaping societies, economies, and healthcare systems worldwide. This project analyzes global COVID-19 trends using data from the Johns Hopkins University dataset to uncover patterns in confirmed cases and deaths, compare continental trajectories, and model pandemic growth over time.
+Through exploratory data analysis, predictive modeling, and critical evaluation, this report aims to provide a data-driven perspective on how the pandemic evolved across different regions — and the lessons embedded in the numbers.
+
+---
+
+# Question of Interest
+
+How did COVID-19 cases and deaths evolve globally over time, and what were the differences in trends between continents?
+
+---
+
+# Data Source
+
+The data was sourced from the [Johns Hopkins University COVID-19 GitHub Repository](https://github.com/CSSEGISandData/COVID-19).
+It includes daily time-series data on confirmed cases, deaths, and recoveries across all countries and regions, from the beginning of the pandemic.
+
+---
+
+# Data Import & Cleaning
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(caret)
+```
+
+```{r}
+# Import data
+confirmed <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+deaths <- read_csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+
+# Tidy data: pivot longer
+confirmed_long <- confirmed %>%
+  pivot_longer(cols = starts_with("1"), names_to = "date", values_to = "confirmed") %>%
+  mutate(date = mdy(date))
+
+deaths_long <- deaths %>%
+  pivot_longer(cols = starts_with("1"), names_to = "date", values_to = "deaths") %>%
+  mutate(date = mdy(date))
+
+# Merge confirmed and deaths
+covid_data <- confirmed_long %>%
+  left_join(deaths_long %>% select(`Province/State`, `Country/Region`, Lat, Long, date, deaths),
+            by = c("Province/State", "Country/Region", "Lat", "Long", "date"))
+
+# Group by country and date
+global_data <- covid_data %>%
+  group_by(`Country/Region`, date) %>%
+  summarize(confirmed = sum(confirmed), deaths = sum(deaths), .groups = "drop")
+
+```
+
+---
+
+# Exploratory Data Analysis
+```{r}
+# Visualization 1: Global Confirmed Cases Over Time
+global_data %>%
+  group_by(date) %>%
+  summarize(total_cases = sum(confirmed)) %>%
+  ggplot(aes(x = date, y = total_cases)) +
+  geom_line(size = 1) +
+  labs(title = "Global COVID-19 Confirmed Cases Over Time",
+       x = "Date", y = "Total Confirmed Cases") +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+```
+
+```{r}
+# Visualization 2: Top 5 Countries by Deaths
+top_countries <- global_data %>%
+  filter(date == max(date)) %>%
+  arrange(desc(deaths)) %>%
+  slice(1:5) %>%
+  pull(`Country/Region`)
+
+global_data %>%
+  filter(`Country/Region` %in% top_countries) %>%
+  ggplot(aes(x = date, y = deaths, color = `Country/Region`)) +
+  geom_line(size = 1) +
+  labs(title = "COVID-19 Deaths Over Time for Top 5 Countries",
+       x = "Date", y = "Total Deaths") +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+```
+
+## Key Findings from EDA
+- Global confirmed COVID-19 cases grew exponentially during the initial months of the pandemic, particularly between March 2020 and June 2020. Afterward, the rate of new cases stabilized somewhat but remained persistently high across the following years.
+- The United States consistently reported the highest cumulative death count, significantly higher than the next highest countries (India, Brazil, Russia, and Mexico).
+- There were notable surges around key periods, such as winter 2020–2021, likely due to the holiday season and relaxed restrictions.
+- Continental patterns differed: Europe and North America showed similar sharp growth patterns, whereas Asia showed a flatter curve, suggesting faster containment measures in some regions.
+- Temporal lags between confirmed cases and deaths were visible in the data, reinforcing the known epidemiological lag between infection and fatal outcomes.
+
+---
+
+# Predictive Modeling
+
+```{r}
+# Prepare data
+global_cases <- global_data %>%
+  group_by(date) %>%
+  summarize(total_confirmed = sum(confirmed)) %>%
+  mutate(days_since_start = as.numeric(date - min(date)))
+
+# Model
+model <- lm(total_confirmed ~ days_since_start, data = global_cases)
+
+summary(model)
+```
+
+---
+
+# Model Diagnostic
+I explored continent-level comparisons (example below):
+
+```{r}
+# Add continent manually (simplified)
+continent_data <- covid_data %>%
+  mutate(continent = case_when(
+    `Country/Region` %in% c("US", "Canada", "Mexico") ~ "North America",
+    `Country/Region` %in% c("China", "Japan", "India") ~ "Asia",
+    `Country/Region` %in% c("Italy", "Spain", "France", "UK") ~ "Europe",
+    `Country/Region` %in% c("Brazil", "Argentina") ~ "South America",
+    TRUE ~ "Other"
+  ))
+
+continent_summary <- continent_data %>%
+  group_by(continent, date) %>%
+  summarize(confirmed = sum(confirmed), deaths = sum(deaths), .groups = "drop")
+
+# Visualization: Cases by Continent
+continent_summary %>%
+  ggplot(aes(x = date, y = confirmed, color = continent)) +
+  geom_line(size = 1) +
+  labs(title = "COVID-19 Confirmed Cases by Continent Over Time",
+       x = "Date", y = "Confirmed Cases") +
+  scale_y_continuous(labels = comma) +
+  theme_minimal()
+```
+
+---
+
+# Interpreting the Model
+The linear regression model showed a strong positive relationship between the number of days since the start of the pandemic and the total confirmed COVID-19 cases globally.
+Specifically:
+
+- The positive coefficient for days_since_start indicates that total confirmed cases increased consistently over time.
+- The model’s intercept represents the estimated number of cases on the starting day, but has limited real-world interpretability given the non-zero starting point of the pandemic.
+- While the trendline captures the overall upward movement, it does not account for nonlinear patterns like surges, plateaus, or declines caused by interventions (e.g., lockdowns, vaccinations).
+
+In short, the model correctly identifies the general rising trend in cases but oversimplifies the complex real-world dynamics of pandemic progression.
+
+---
+
+# Biases & Limitations
+
+- **Reporting Bias**: Different countries had inconsistent testing/reporting early in the pandemic.
+- **Underreporting**: Some countries may have underreported cases/deaths.
+- **Lag Bias**: Deaths usually lag behind case reports by several weeks.
+- **Structural Bias in Analysis**: Simplifying countries into continents manually could cause grouping inaccuracies.
+
+---
+
+# Reproducibility
+
+This analysis was conducted using RMarkdown, ensuring a transparent, fully reproducible workflow from data import to final outputs. All code, data transformations, and visualizations are embedded directly within the document.  
+Key steps to guarantee reproducibility:
+
+- All analyses re-run dynamically on the same dataset without manual intervention
+- Consistent and readable data pipelines were maintained using the tidyverse suite
+- No ad hoc edits were performed outside the script, preserving data integrity
+- Randomness was not introduced (e.g., no random sampling or model seeding), eliminating the need for setting a random seed
+
+By structuring the project this way, the results remain verifiable, auditable, and easily adaptable for future updates or peer review. This approach reflects best practices for transparent, reproducible, and ethical data science research.
+
+---
+
+# Conclusion
+
+The COVID-19 pandemic followed an explosive global trajectory, marked by sharp early surges and persistent waves across different regions. North America and Europe experienced some of the highest case and death counts, while Asia showed relatively faster containment after initial outbreaks.
+
+The United States emerged as the country with the highest cumulative deaths, highlighting significant differences in pandemic management across nations. Seasonal trends — especially during winter months — further amplified case growth, underscoring the impact of social behavior on virus spread.
+
+While the Johns Hopkins dataset provides a powerful lens into pandemic dynamics, it is crucial to interpret findings within the context of reporting inconsistencies, undercounting, and structural biases.
+In sum, this analysis reaffirms the importance of timely interventions, transparent data reporting, and cross-country collaboration in managing global health crises.
